@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Đơn hàng của tôi</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page">
+    <div class="container">
+      <div class="section-title"><h1>Đơn hàng của tôi</h1></div>
+      <div id="orders-root"><div class="empty"><p>Đang tải...</p></div></div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+
+  <footer id="app-footer"></footer>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    if (!Auth.isLoggedIn()) {
+      window.location.href = '/login.html?next=' + encodeURIComponent('/orders.html');
+    }
+    let page = 1;
+
+    async function load() {
+      const root = document.getElementById('orders-root');
+      const pager = document.getElementById('pagination');
+      try {
+        const res = await API.get('/api/orders?page=' + page + '&limit=8');
+        const orders = res.data;
+        if (!orders.length) {
+          root.innerHTML = `<div class="card"><div class="empty"><div class="ico">📦</div><h3>Chưa có đơn hàng</h3><p>Đơn hàng của bạn sẽ xuất hiện ở đây.</p><a class="btn btn-primary mt-2" href="/products.html">Mua sắm ngay</a></div></div>`;
+          pager.innerHTML = '';
+          return;
+        }
+
+        root.innerHTML = orders.map((o) => `
+          <div class="card order-card mb-2">
+            <div class="order-head">
+              <span class="order-code">${esc(o.order_code)}</span>
+              ${statusBadge(o.status)}
+              <span class="muted small">${fmtDate(o.created_at)}</span>
+              <div class="grow"></div>
+              <span class="bold">${fmtMoney(o.total_amount)}</span>
+            </div>
+            <div class="order-items">
+              ${(o.items || []).map((it) => `
+                <div class="order-item">
+                  <a class="order-thumb" href="/product.html?id=${it.product_id}">${mediaHtml(it.image_url, it.name, 'img-placeholder')}</a>
+                  <div class="grow">
+                    <a class="small bold" href="/product.html?id=${it.product_id}">${esc(it.name)}</a>
+                    <div class="small muted">SL: ${it.quantity} × ${fmtMoney(it.unit_price)}</div>
+                  </div>
+                  <div class="small bold">${fmtMoney(it.line_total)}</div>
+                </div>`).join('')}
+            </div>
+            <div class="order-foot">
+              <span class="muted small">Giao đến: ${esc(o.shipping_address)}</span>
+              <div class="grow"></div>
+              ${o.status === 'PENDING'
+                ? `<button class="btn btn-danger-soft btn-sm" onclick="cancelOrder(${o.id})">Hủy đơn hàng</button>`
+                : ''}
+            </div>
+          </div>`).join('');
+
+        const totalPages = res.pagination.totalPages;
+        if (totalPages > 1) {
+          let html = `<button ${page <= 1 ? 'disabled' : ''} data-p="${page - 1}">←</button>`;
+          for (let i = 1; i <= totalPages; i++) html += `<button class="${i === page ? 'active' : ''}" data-p="${i}">${i}</button>`;
+          html += `<button ${page >= totalPages ? 'disabled' : ''} data-p="${page + 1}">→</button>`;
+          pager.innerHTML = html;
+          pager.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+            const np = parseInt(b.getAttribute('data-p'));
+            if (np && np !== page) { page = np; load(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+          }));
+        } else {
+          pager.innerHTML = '';
+        }
+      } catch (e) {
+        root.innerHTML = `<div class="card"><div class="empty"><div class="ico">⚠</div><h3>Không tải được đơn hàng</h3><p>${esc(e.message)}</p></div></div>`;
+      }
+    }
+
+    async function cancelOrder(id) {
+      if (!confirm('Bạn có chắc muốn hủy đơn hàng này?')) return;
+      try {
+        await API.post('/api/orders/' + id + '/cancel');
+        toast('Đã hủy đơn hàng.', 'success');
+        load();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.cancelOrder = cancelOrder;
+
+    load();
+  </script>
+</body>
+</html>

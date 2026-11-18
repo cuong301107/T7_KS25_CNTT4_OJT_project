@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShopEase — Đăng nhập</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>"
+    />
+    <link rel="stylesheet" href="/assets/css/main.css" />
+  </head>
+  <body>
+    <header id="app-header"></header>
+
+    <main class="page">
+      <div class="container">
+        <div class="auth-wrap">
+          <div class="card auth-card">
+            <h1>Đăng nhập</h1>
+            <p class="sub">Chào mừng bạn quay lại ShopEase.</p>
+            <div
+              id="form-error"
+              class="alert alert-error"
+              style="display: none; margin-bottom: 16px"
+            ></div>
+
+            <form id="login-form">
+              <div class="field">
+                <label class="label" for="email">Email</label>
+                <input
+                  class="input"
+                  type="email"
+                  id="email"
+                  placeholder="you@example.com"
+                  required
+                  autocomplete="email"
+                />
+              </div>
+              <div class="field">
+                <label class="label" for="password">Mật khẩu</label>
+                <input
+                  class="input"
+                  type="password"
+                  id="password"
+                  placeholder="••••••••"
+                  required
+                  autocomplete="current-password"
+                />
+              </div>
+              <button class="btn btn-primary btn-block btn-lg" type="submit">
+                Đăng nhập
+              </button>
+            </form>
+
+            <p class="center small muted mt-3">
+              Chưa có tài khoản?
+              <a
+                href="/register.html"
+                style="font-weight: 700; color: var(--text)"
+                >Đăng ký ngay</a
+              >
+            </p>
+            <!-- <div class="mt-3" style="background:var(--surface-3);border-radius:10px;padding:12px 14px">
+            <p class="small muted">Tài khoản demo:</p>
+            <p class="small">Khách hàng: <b>customer@shopease.com</b> / <b>Customer@123</b></p>
+            <p class="small">Quản trị: <b>admin@shopease.com</b> / <b>Admin@123</b></p>
+          </div> -->
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer id="app-footer"></footer>
+
+    <script src="/assets/js/api.js"></script>
+    <script src="/assets/js/common.js"></script>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get("next") || "";
+
+      document
+        .getElementById("login-form")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const errBox = document.getElementById("form-error");
+          errBox.style.display = "none";
+          const email = document.getElementById("email").value.trim();
+          const password = document.getElementById("password").value;
+
+          const btn = e.target.querySelector("button[type=submit]");
+          btn.disabled = true;
+          btn.textContent = "Đang xử lý...";
+          try {
+            const res = await API.post("/api/auth/login", { email, password });
+            Auth.setSession(res.token, res.user);
+            toast(res.message, "success");
+            setTimeout(() => {
+              if (res.user.position === "ADMIN")
+                window.location.href = "/admin/dashboard.html";
+              else window.location.href = next || "/index.html";
+            }, 300);
+          } catch (err) {
+            errBox.textContent = err.message;
+            errBox.style.display = "flex";
+            btn.disabled = false;
+            btn.textContent = "Đăng nhập";
+          }
+        });
+    </script>
+  </body>
+</html>

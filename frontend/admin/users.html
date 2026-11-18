@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase Admin — Người dùng</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-side" id="admin-sidebar"></aside>
+    <div class="admin-main">
+      <div class="admin-topbar">
+        <h1>Quản lý người dùng</h1>
+        <div class="flex" id="admin-topbar-actions"></div>
+      </div>
+
+      <div class="flex" style="gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <input class="input" id="search-input" placeholder="Tìm tên hoặc email..." style="max-width:280px">
+        <select class="select" id="position-filter">
+          <option value="">Mọi vai trò</option>
+          <option value="CUSTOMER">Khách hàng</option>
+          <option value="ADMIN">Quản trị viên</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <table class="admin-table">
+          <thead>
+            <tr><th>Người dùng</th><th>Vai trò</th><th>SĐT</th><th>Đơn hàng</th><th>Trạng thái</th><th style="text-align:right">Hành động</th></tr>
+          </thead>
+          <tbody id="user-tbody"></tbody>
+        </table>
+        <div class="pagination" id="pagination" style="padding:16px"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script src="/assets/js/admin.js"></script>
+  <script>
+    let page = 1, q = '', position = '';
+    const me = Auth.getUser() || {};
+
+    async function load() {
+      const tbody = document.getElementById('user-tbody');
+      const pager = document.getElementById('pagination');
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">Đang tải...</td></tr>';
+      try {
+        const p = new URLSearchParams({ page, limit: '10' });
+        if (q) p.set('q', q);
+        if (position) p.set('position', position);
+        const res = await API.get('/api/admin/users?' + p.toString());
+
+        if (!res.data.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="muted center">Không có người dùng nào.</td></tr>';
+          pager.innerHTML = '';
+          return;
+        }
+        tbody.innerHTML = res.data.map((u) => `
+          <tr>
+            <td>
+              <div class="flex" style="gap:10px">
+                <span class="avatar">${esc((u.full_name || '?').charAt(0).toUpperCase())}</span>
+                <div>
+                  <div class="bold">${esc(u.full_name)}</div>
+                  <div class="muted small">${esc(u.email)}</div>
+                </div>
+              </div>
+            </td>
+            <td>${statusBadge(u.position)}</td>
+            <td>${esc(u.phone || '—')}</td>
+            <td>${u.order_count}</td>
+            <td>${statusBadge(u.status)}</td>
+            <td>
+              <div class="table-actions" style="justify-content:flex-end">
+                <button class="btn btn-outline btn-sm" onclick="viewUser(${u.id})">Xem</button>
+                ${u.id !== me.id ? `
+                  <button class="btn ${u.status === 'ACTIVE' ? 'btn-danger-soft' : 'btn-outline'} btn-sm" onclick="toggleLock(${u.id})">
+                    ${u.status === 'ACTIVE' ? 'Khóa' : 'Mở khóa'}
+                  </button>` : ''}
+              </div>
+            </td>
+          </tr>`).join('');
+
+        const totalPages = res.pagination.totalPages;
+        if (totalPages > 1) {
+          let html = `<button ${page <= 1 ? 'disabled' : ''} data-p="${page - 1}">←</button>`;
+          for (let i = 1; i <= totalPages; i++) html += `<button class="${i === page ? 'active' : ''}" data-p="${i}">${i}</button>`;
+          html += `<button ${page >= totalPages ? 'disabled' : ''} data-p="${page + 1}">→</button>`;
+          pager.innerHTML = html;
+          pager.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+            const np = parseInt(b.getAttribute('data-p'));
+            if (np && np !== page) { page = np; load(); }
+          }));
+        } else pager.innerHTML = '';
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="muted center">Lỗi: ${esc(e.message)}</td></tr>`;
+        pager.innerHTML = '';
+      }
+    }
+
+    async function viewUser(id) {
+      try {
+        const res = await API.get('/api/admin/users/' + id);
+        const u = res.data;
+        openModal('Thông tin người dùng', `
+          <div class="center" style="margin-bottom:16px">
+            <span class="avatar" style="width:56px;height:56px;font-size:22px;margin:0 auto 8px">${esc((u.full_name || '?').charAt(0).toUpperCase())}</span>
+            <div class="bold" style="font-size:17px">${esc(u.full_name)}</div>
+            <div class="muted small">${esc(u.email)}</div>
+          </div>
+          <div style="background:var(--surface-3);border-radius:10px;padding:14px">
+            <div class="flex-between small"><span class="muted">Vai trò</span><span>${statusBadge(u.position)}</span></div>
+            <div class="flex-between small mt-2"><span class="muted">Trạng thái</span><span>${statusBadge(u.status)}</span></div>
+            <div class="flex-between small mt-2"><span class="muted">Số điện thoại</span><b>${esc(u.phone || '—')}</b></div>
+            <div class="flex-between small mt-2"><span class="muted">Địa chỉ</span><b>${esc(u.address || '—')}</b></div>
+            <div class="flex-between small mt-2"><span class="muted">Số đơn hàng</span><b>${u.order_count}</b></div>
+            <div class="flex-between small mt-2"><span class="muted">Tổng chi tiêu</span><b>${fmtMoney(u.total_spent)}</b></div>
+            <div class="flex-between small mt-2"><span class="muted">Ngày tạo</span><b>${fmtDate(u.created_at)}</b></div>
+          </div>
+          <div class="modal-foot" style="padding:0;border:none;margin-top:16px">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Đóng</button>
+          </div>
+        `);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.viewUser = viewUser;
+
+    async function toggleLock(id) {
+      try {
+        const res = await API.patch('/api/admin/users/' + id + '/status');
+        toast(res.message, 'success');
+        load();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.toggleLock = toggleLock;
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      q = e.target.value.trim(); page = 1; debounce(load, 300);
+    });
+    document.getElementById('position-filter').addEventListener('change', (e) => {
+      position = e.target.value; page = 1; load();
+    });
+
+    let t;
+    function debounce(fn, ms) { clearTimeout(t); t = setTimeout(fn, ms); }
+
+    load();
+  </script>
+</body>
+</html>

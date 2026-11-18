@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase Admin — Tổng quan</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-side" id="admin-sidebar"></aside>
+    <div class="admin-main">
+      <div class="admin-topbar">
+        <h1>Tổng quan</h1>
+        <div class="flex" id="admin-topbar-actions"></div>
+      </div>
+      <div id="admin-content">
+        <div class="empty"><p>Đang tải dữ liệu...</p></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script src="/assets/js/admin.js"></script>
+  <script>
+    async function load() {
+      const box = document.getElementById('admin-content');
+      try {
+        const res = await API.get('/api/admin/stats');
+        const s = res.data;
+        box.innerHTML = `
+          <div class="stat-grid">
+            <div class="card stat-card">
+              <span class="label">Doanh thu</span>
+              <span class="value">${fmtMoney(s.revenue)}</span>
+              <span class="sub">Từ đơn hoàn thành</span>
+            </div>
+            <div class="card stat-card">
+              <span class="label">Đơn hàng</span>
+              <span class="value">${s.orders.total}</span>
+              <span class="sub">${s.orders.pending} chờ xác nhận · ${s.orders.completed} hoàn thành</span>
+            </div>
+            <div class="card stat-card">
+              <span class="label">Sản phẩm</span>
+              <span class="value">${s.products.total}</span>
+              <span class="sub">${s.products.active} đang kinh doanh</span>
+            </div>
+            <div class="card stat-card">
+              <span class="label">Khách hàng</span>
+              <span class="value">${s.customers}</span>
+              <span class="sub">Tài khoản khách hàng</span>
+            </div>
+          </div>
+
+          <div class="grid-2 mt-3" style="align-items:start">
+            <div class="card">
+              <div class="card-pad">
+                <h3 style="font-size:15px;margin-bottom:14px">Đơn hàng gần đây</h3>
+                <table class="admin-table">
+                  <thead><tr><th>Mã đơn</th><th>Khách hàng</th><th>Tổng tiền</th><th>Trạng thái</th></tr></thead>
+                  <tbody>
+                    ${s.recent_orders.length ? s.recent_orders.map((o) => `
+                      <tr>
+                        <td class="bold">${esc(o.order_code)}</td>
+                        <td>${esc(o.customer)}</td>
+                        <td>${fmtMoney(o.total_amount)}</td>
+                        <td>${statusBadge(o.status)}</td>
+                      </tr>`).join('') : '<tr><td colspan="4" class="muted">Chưa có đơn hàng.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-pad">
+                <h3 style="font-size:15px;margin-bottom:14px">Sản phẩm bán chạy</h3>
+                <table class="admin-table">
+                  <thead><tr><th>Sản phẩm</th><th>Đã bán</th></tr></thead>
+                  <tbody>
+                    ${s.top_products.length ? s.top_products.map((p) => `
+                      <tr><td>${esc(p.name)}</td><td class="bold">${p.sold}</td></tr>`).join('') : '<tr><td colspan="2" class="muted">Chưa có dữ liệu.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>`;
+      } catch (e) {
+        box.innerHTML = `<div class="card"><div class="empty"><div class="ico">⚠</div><h3>Lỗi tải dữ liệu</h3><p>${esc(e.message)}</p></div></div>`;
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

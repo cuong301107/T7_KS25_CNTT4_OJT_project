@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase Admin — Đăng nhập</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body class="admin-body">
+  <main class="page" style="display:grid;place-items:center">
+    <div class="auth-wrap" style="margin:0">
+      <div class="card auth-card">
+        <div class="center" style="margin-bottom:18px">
+          <span class="logo-mark" style="width:44px;height:44px;font-size:20px;margin:0 auto 10px;border-radius:12px">S</span>
+          <h1 style="font-size:22px">ShopEase Admin</h1>
+          <p class="sub" style="margin:4px 0 0">Đăng nhập trang quản trị</p>
+        </div>
+        <div id="form-error" class="alert alert-error" style="display:none;margin-bottom:16px"></div>
+        <form id="login-form">
+          <div class="field">
+            <label class="label">Email</label>
+            <input class="input" type="email" id="email" placeholder="admin@shopease.com" required autocomplete="email">
+          </div>
+          <div class="field">
+            <label class="label">Mật khẩu</label>
+            <input class="input" type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+          <button class="btn btn-primary btn-block btn-lg" type="submit">Đăng nhập</button>
+        </form>
+        <p class="center small muted mt-3"><a href="/index.html">← Về trang web</a></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    if (Auth.isLoggedIn() && Auth.isAdmin()) {
+      window.location.href = '/admin/dashboard.html';
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('form-error');
+      errBox.style.display = 'none';
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      btn.textContent = 'Đang xử lý...';
+      try {
+        const res = await API.post('/api/auth/login', { email, password });
+        if (res.user.position !== 'ADMIN') {
+          throw new Error('Tài khoản này không có quyền quản trị.');
+        }
+        Auth.setSession(res.token, res.user);
+        window.location.href = '/admin/dashboard.html';
+      } catch (err) {
+        errBox.textContent = err.message;
+        errBox.style.display = 'flex';
+        btn.disabled = false;
+        btn.textContent = 'Đăng nhập';
+      }
+    });
+  </script>
+</body>
+</html>

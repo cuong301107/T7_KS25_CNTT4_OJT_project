@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Đăng ký</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page">
+    <div class="container">
+      <div class="auth-wrap">
+        <div class="card auth-card">
+          <h1>Tạo tài khoản</h1>
+          <p class="sub">Đăng ký để mua sắm và theo dõi đơn hàng.</p>
+          <div id="form-error" class="alert alert-error" style="display:none;margin-bottom:16px"></div>
+
+          <form id="register-form">
+            <div class="field">
+              <label class="label" for="full_name">Họ và tên</label>
+              <input class="input" type="text" id="full_name" placeholder="Nguyễn Văn A" required autocomplete="name">
+            </div>
+            <div class="field">
+              <label class="label" for="email">Email</label>
+              <input class="input" type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+            </div>
+            <div class="field">
+              <label class="label" for="password">Mật khẩu</label>
+              <input class="input" type="password" id="password" placeholder="Ít nhất 8 ký tự" required autocomplete="new-password" minlength="8">
+            </div>
+            <div class="field">
+              <label class="label" for="confirm_password">Xác nhận mật khẩu</label>
+              <input class="input" type="password" id="confirm_password" placeholder="Nhập lại mật khẩu" required autocomplete="new-password">
+            </div>
+            <button class="btn btn-primary btn-block btn-lg" type="submit">Đăng ký</button>
+          </form>
+
+          <p class="center small muted mt-3">Đã có tài khoản? <a href="/login.html" style="font-weight:700;color:var(--text)">Đăng nhập</a></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer id="app-footer"></footer>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('form-error');
+      errBox.style.display = 'none';
+      const payload = {
+        full_name: document.getElementById('full_name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        password: document.getElementById('password').value,
+        confirm_password: document.getElementById('confirm_password').value
+      };
+
+      const btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      btn.textContent = 'Đang xử lý...';
+      try {
+        const res = await API.post('/api/auth/register', payload);
+        Auth.setSession(res.token, res.user);
+        toast(res.message, 'success');
+        setTimeout(() => (window.location.href = '/index.html'), 300);
+      } catch (err) {
+        errBox.textContent = err.message;
+        errBox.style.display = 'flex';
+        btn.disabled = false;
+        btn.textContent = 'Đăng ký';
+      }
+    });
+  </script>
+</body>
+</html>

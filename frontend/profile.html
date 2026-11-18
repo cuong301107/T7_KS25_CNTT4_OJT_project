@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Tài khoản</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page">
+    <div class="container" style="max-width:640px">
+      <div class="section-title"><h1>Thông tin cá nhân</h1></div>
+      <div id="profile-root"><div class="empty"><p>Đang tải...</p></div></div>
+    </div>
+  </main>
+
+  <footer id="app-footer"></footer>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    if (!Auth.isLoggedIn()) {
+      window.location.href = '/login.html?next=' + encodeURIComponent('/profile.html');
+    }
+
+    async function load() {
+      const root = document.getElementById('profile-root');
+      try {
+        const res = await API.get('/api/auth/me');
+        const u = res.data;
+        root.innerHTML = `
+          <div class="card card-pad">
+            <div class="flex" style="gap:14px;margin-bottom:20px">
+              <span class="avatar" style="width:52px;height:52px;font-size:20px">${esc((u.full_name || '?').charAt(0).toUpperCase())}</span>
+              <div>
+                <div class="bold" style="font-size:17px">${esc(u.full_name)}</div>
+                <div class="muted small">${esc(u.email)}</div>
+              </div>
+            </div>
+            <div id="form-error" class="alert alert-error" style="display:none;margin-bottom:16px"></div>
+            <form id="profile-form">
+              <div class="field">
+                <label class="label">Họ và tên</label>
+                <input class="input" id="full_name" value="${esc(u.full_name || '')}" required>
+              </div>
+              <div class="field">
+                <label class="label">Email</label>
+                <input class="input" value="${esc(u.email)}" disabled>
+                <div class="form-hint">Email dùng để đăng nhập, không thể thay đổi.</div>
+              </div>
+              <div class="field">
+                <label class="label">Số điện thoại</label>
+                <input class="input" id="phone" value="${esc(u.phone || '')}" placeholder="09xxxxxxxx">
+              </div>
+              <div class="field">
+                <label class="label">Địa chỉ</label>
+                <textarea class="textarea" id="address" placeholder="Địa chỉ giao hàng mặc định">${esc(u.address || '')}</textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Lưu thay đổi</button>
+            </form>
+          </div>`;
+
+        document.getElementById('profile-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const errBox = document.getElementById('form-error');
+          errBox.style.display = 'none';
+          const payload = {
+            full_name: document.getElementById('full_name').value.trim(),
+            phone: document.getElementById('phone').value.trim(),
+            address: document.getElementById('address').value.trim()
+          };
+          const btn = e.target.querySelector('button[type=submit]');
+          btn.disabled = true;
+          try {
+            const upd = await API.put('/api/auth/me', payload);
+            Auth.setSession(Auth.getToken(), upd.data);
+            toast(upd.message, 'success');
+            btn.disabled = false;
+            setTimeout(renderHeader, 50);
+          } catch (err) {
+            errBox.textContent = err.message;
+            errBox.style.display = 'flex';
+            btn.disabled = false;
+          }
+        });
+      } catch (e) {
+        root.innerHTML = `<div class="card"><div class="empty"><div class="ico">⚠</div><h3>Lỗi</h3><p>${esc(e.message)}</p></div></div>`;
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

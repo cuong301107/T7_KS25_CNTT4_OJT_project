@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase Admin — Sản phẩm</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-side" id="admin-sidebar"></aside>
+    <div class="admin-main">
+      <div class="admin-topbar">
+        <h1>Quản lý sản phẩm</h1>
+        <div class="flex" id="admin-topbar-actions"></div>
+      </div>
+
+      <div class="flex" style="gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <input class="input" id="search-input" placeholder="Tìm theo tên sản phẩm..." style="max-width:260px">
+        <select class="select" id="category-filter"><option value="">Tất cả danh mục</option></select>
+        <select class="select" id="status-filter">
+          <option value="">Mọi trạng thái</option>
+          <option value="ACTIVE">Đang kinh doanh</option>
+          <option value="INACTIVE">Ngừng bán</option>
+        </select>
+        <div class="grow"></div>
+        <button class="btn btn-primary" onclick="openForm(null)">+ Thêm sản phẩm</button>
+      </div>
+
+      <div class="card">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Sản phẩm</th><th>Danh mục</th><th>Giá</th><th>Tồn kho</th><th>Trạng thái</th><th style="text-align:right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="product-tbody"></tbody>
+        </table>
+        <div class="pagination" id="pagination" style="padding:16px"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script src="/assets/js/admin.js"></script>
+  <script>
+    let page = 1, q = '', category = '', status = '';
+    let categories = [];
+    const productsMap = {};
+
+    async function loadCategories() {
+      try {
+        const res = await API.get('/api/admin/categories');
+        categories = res.data;
+        const sel = document.getElementById('category-filter');
+        sel.innerHTML = '<option value="">Tất cả danh mục</option>' +
+          categories.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      } catch (e) { /* ignore */ }
+    }
+
+    function categoryOptions(selectedId) {
+      return categories.map((c) =>
+        `<option value="${c.id}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${esc(c.name)}</option>`
+      ).join('');
+    }
+
+    async function loadProducts() {
+      const tbody = document.getElementById('product-tbody');
+      const pager = document.getElementById('pagination');
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">Đang tải...</td></tr>';
+      try {
+        const p = new URLSearchParams({ page, limit: '10' });
+        if (q) p.set('q', q);
+        if (category) p.set('category', category);
+        if (status) p.set('status', status);
+        const res = await API.get('/api/admin/products?' + p.toString());
+
+        if (!res.data.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="muted center">Không có sản phẩm nào.</td></tr>';
+          pager.innerHTML = '';
+          return;
+        }
+        res.data.forEach((p) => (productsMap[p.id] = p));
+        tbody.innerHTML = res.data.map((prod) => `
+          <tr>
+            <td>
+              <div class="flex" style="gap:10px">
+                <div class="thumb">${mediaHtml(prod.image_url, prod.name, 'img-placeholder')}</div>
+                <div>
+                  <div class="bold">${esc(prod.name)}</div>
+                  <div class="muted small">#${prod.id}</div>
+                </div>
+              </div>
+            </td>
+            <td>${esc(prod.category_name)}</td>
+            <td class="bold">${fmtMoney(prod.price)}</td>
+            <td>${prod.stock_quantity}</td>
+            <td>${statusBadge(prod.status)}</td>
+            <td>
+              <div class="table-actions" style="justify-content:flex-end">
+                <button class="btn btn-outline btn-sm" onclick="openForm(${prod.id})">Sửa</button>
+                <button class="btn ${prod.status === 'ACTIVE' ? 'btn-danger-soft' : 'btn-outline'} btn-sm" onclick="toggleStatus(${prod.id}, '${prod.status}')">
+                  ${prod.status === 'ACTIVE' ? 'Ngừng bán' : 'Kích hoạt'}
+                </button>
+                <button class="btn btn-danger-soft btn-sm" onclick="deleteProduct(${prod.id})">Xóa</button>
+              </div>
+            </td>
+          </tr>`).join('');
+
+        const totalPages = res.pagination.totalPages;
+        if (totalPages > 1) {
+          let html = `<button ${page <= 1 ? 'disabled' : ''} data-p="${page - 1}">←</button>`;
+          for (let i = 1; i <= totalPages; i++) html += `<button class="${i === page ? 'active' : ''}" data-p="${i}">${i}</button>`;
+          html += `<button ${page >= totalPages ? 'disabled' : ''} data-p="${page + 1}">→</button>`;
+          pager.innerHTML = html;
+          pager.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+            const np = parseInt(b.getAttribute('data-p'));
+            if (np && np !== page) { page = np; loadProducts(); }
+          }));
+        } else {
+          pager.innerHTML = '';
+        }
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="muted center">Lỗi: ${esc(e.message)}</td></tr>`;
+        pager.innerHTML = '';
+      }
+    }
+
+    function openForm(id) {
+      const prod = id ? productsMap[id] : null;
+      const isEdit = !!prod;
+      const title = isEdit ? 'Sửa sản phẩm' : 'Thêm sản phẩm';
+      openModal(title, `
+        <form id="product-form">
+          <div class="field">
+            <label class="label">Tên sản phẩm</label>
+            <input class="input" id="f-name" value="${esc(prod ? prod.name : '')}" required>
+          </div>
+          <div class="input-row">
+            <div class="field">
+              <label class="label">Danh mục</label>
+              <select class="select" id="f-category">${categoryOptions(prod ? prod.category_id : '')}</select>
+            </div>
+            <div class="field">
+              <label class="label">Trạng thái</label>
+              <select class="select" id="f-status">
+                <option value="ACTIVE" ${!prod || prod.status === 'ACTIVE' ? 'selected' : ''}>Đang kinh doanh</option>
+                <option value="INACTIVE" ${prod && prod.status === 'INACTIVE' ? 'selected' : ''}>Ngừng bán</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-row">
+            <div class="field">
+              <label class="label">Giá bán (đ)</label>
+              <input class="input" id="f-price" type="number" min="1" step="1" value="${prod ? prod.price : ''}" required>
+            </div>
+            <div class="field">
+              <label class="label">Số lượng tồn kho</label>
+              <input class="input" id="f-stock" type="number" min="0" step="1" value="${prod ? prod.stock_quantity : 0}" required>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">Mô tả</label>
+            <textarea class="textarea" id="f-desc">${esc(prod ? (prod.description || '') : '')}</textarea>
+          </div>
+          <div class="field">
+            <label class="label">URL hình ảnh <span class="muted">(tùy chọn)</span></label>
+            <input class="input" id="f-image" value="${esc(prod ? (prod.image_url || '') : '')}" placeholder="https://...">
+          </div>
+          <div id="form-error" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
+          <div class="modal-foot" style="padding:0;border:none;margin-top:6px">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Hủy</button>
+            <button type="submit" class="btn btn-primary">${isEdit ? 'Lưu thay đổi' : 'Thêm sản phẩm'}</button>
+          </div>
+        </form>`);
+
+      document.getElementById('product-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errBox = document.getElementById('form-error');
+        errBox.style.display = 'none';
+        const payload = {
+          name: document.getElementById('f-name').value.trim(),
+          category_id: parseInt(document.getElementById('f-category').value),
+          price: parseFloat(document.getElementById('f-price').value),
+          stock_quantity: parseInt(document.getElementById('f-stock').value),
+          description: document.getElementById('f-desc').value.trim(),
+          image_url: document.getElementById('f-image').value.trim(),
+          status: document.getElementById('f-status').value
+        };
+        try {
+          if (isEdit) await API.put('/api/admin/products/' + prod.id, payload);
+          else await API.post('/api/admin/products', payload);
+          toast(isEdit ? 'Đã cập nhật sản phẩm.' : 'Đã thêm sản phẩm.', 'success');
+          closeModal();
+          loadProducts();
+        } catch (err) {
+          errBox.textContent = err.message;
+          errBox.style.display = 'flex';
+        }
+      });
+    }
+    window.openForm = openForm;
+
+    async function toggleStatus(id, current) {
+      const newStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      try {
+        await API.put('/api/admin/products/' + id, { status: newStatus });
+        toast(newStatus === 'ACTIVE' ? 'Đã kích hoạt sản phẩm.' : 'Đã ngừng kinh doanh sản phẩm.', 'success');
+        loadProducts();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.toggleStatus = toggleStatus;
+
+    async function deleteProduct(id) {
+      if (!confirm('Xóa sản phẩm này? Hành động không thể hoàn tác.')) return;
+      try {
+        await API.del('/api/admin/products/' + id);
+        toast('Đã xóa sản phẩm.', 'success');
+        loadProducts();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.deleteProduct = deleteProduct;
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      q = e.target.value.trim();
+      page = 1;
+      debounce(loadProducts, 300);
+    });
+    document.getElementById('category-filter').addEventListener('change', (e) => {
+      category = e.target.value; page = 1; loadProducts();
+    });
+    document.getElementById('status-filter').addEventListener('change', (e) => {
+      status = e.target.value; page = 1; loadProducts();
+    });
+
+    let debounceTimer;
+    function debounce(fn, ms) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fn, ms);
+    }
+
+    loadCategories().then(loadProducts);
+  </script>
+</body>
+</html>

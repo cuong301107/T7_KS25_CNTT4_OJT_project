@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Giỏ hàng</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page">
+    <div class="container">
+      <div class="section-title"><h1>Giỏ hàng</h1></div>
+      <div id="cart-root">
+        <div class="empty"><p>Đang tải...</p></div>
+      </div>
+    </div>
+  </main>
+
+  <footer id="app-footer"></footer>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    if (!Auth.isLoggedIn()) {
+      window.location.href = '/login.html?next=' + encodeURIComponent('/cart.html');
+    }
+
+    async function loadCart() {
+      const root = document.getElementById('cart-root');
+      try {
+        const res = await API.get('/api/cart');
+        const items = res.data.items;
+        if (!items.length) {
+          root.innerHTML = `<div class="card"><div class="empty"><div class="ico">🛒</div><h3>Giỏ hàng trống</h3><p>Hãy thêm sản phẩm để bắt đầu mua sắm.</p><a class="btn btn-primary mt-2" href="/products.html">Mua sắm ngay</a></div></div>`;
+          return;
+        }
+        root.innerHTML = `
+          <div class="cart-layout">
+            <div class="card">
+              ${items.map((it) => `
+                <div class="cart-row">
+                  <a class="cart-thumb" href="/product.html?id=${it.product_id}">${mediaHtml(it.image_url, it.name, 'img-placeholder')}</a>
+                  <div class="grow">
+                    <a class="name" href="/product.html?id=${it.product_id}">${esc(it.name)}</a>
+                    <div class="unit">${fmtMoney(it.price)} × ${it.quantity}</div>
+                    ${!it.available ? '<div class="small" style="color:var(--danger)">Sản phẩm đã ngừng kinh doanh</div>' : ''}
+                  </div>
+                  <div class="qty-stepper">
+                    <button onclick="changeQty(${it.id}, ${it.quantity - 1})" ${it.quantity <= 1 ? 'disabled' : ''}>−</button>
+                    <input type="text" value="${it.quantity}" readonly>
+                    <button onclick="changeQty(${it.id}, ${it.quantity + 1})" ${it.quantity >= it.stock_quantity ? 'disabled' : ''}>+</button>
+                  </div>
+                  <div class="bold" style="min-width:110px;text-align:right">${fmtMoney(it.line_total)}</div>
+                  <button class="btn btn-danger-soft btn-sm btn-icon" onclick="removeItem(${it.id})" title="Xóa">✕</button>
+                </div>`).join('')}
+            </div>
+            <div class="card card-pad" style="position:sticky;top:80px">
+              <h3 style="font-size:16px;margin-bottom:14px">Tóm tắt đơn hàng</h3>
+              <div class="summary-row"><span class="muted">Số lượng</span><span>${res.data.total_items}</span></div>
+              <div class="summary-row total"><span>Tổng tiền</span><span>${fmtMoney(res.data.total)}</span></div>
+              <a class="btn btn-primary btn-block btn-lg mt-2" href="/checkout.html">Tiến hành đặt hàng</a>
+              <a class="btn btn-outline btn-block mt-1" href="/products.html">Tiếp tục mua sắm</a>
+            </div>
+          </div>`;
+      } catch (e) {
+        root.innerHTML = `<div class="card"><div class="empty"><div class="ico">⚠</div><h3>Không tải được giỏ hàng</h3><p>${esc(e.message)}</p></div></div>`;
+      }
+    }
+
+    async function changeQty(itemId, qty) {
+      if (qty < 1) return;
+      try {
+        await API.put('/api/cart/' + itemId, { quantity: qty });
+        await loadCart();
+        refreshCartBadge();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.changeQty = changeQty;
+
+    async function removeItem(itemId) {
+      try {
+        await API.del('/api/cart/' + itemId);
+        toast('Đã xóa sản phẩm khỏi giỏ hàng.', 'success');
+        await loadCart();
+        refreshCartBadge();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.removeItem = removeItem;
+
+    loadCart();
+  </script>
+</body>
+</html>

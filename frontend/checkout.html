@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShopEase — Thanh toán</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>"
+    />
+    <link rel="stylesheet" href="/assets/css/main.css" />
+  </head>
+  <body>
+    <header id="app-header"></header>
+
+    <main class="page">
+      <div class="container">
+        <div class="section-title"><h1>Thanh toán</h1></div>
+        <div id="checkout-root">
+          <div class="empty"><p>Đang tải...</p></div>
+        </div>
+      </div>
+    </main>
+
+    <footer id="app-footer"></footer>
+
+    <script src="/assets/js/api.js"></script>
+    <script src="/assets/js/common.js"></script>
+    <script>
+      if (!Auth.isLoggedIn()) {
+        window.location.href =
+          "/login.html?next=" + encodeURIComponent("/checkout.html");
+      }
+
+      async function load() {
+        const root = document.getElementById("checkout-root");
+        try {
+          const res = await API.get("/api/cart");
+          const items = res.data.items;
+          if (!items.length) {
+            root.innerHTML = `<div class="card"><div class="empty"><div class="ico">🛒</div><h3>Giỏ hàng trống</h3><p>Không có sản phẩm nào để đặt hàng.</p><a class="btn btn-primary mt-2" href="/products.html">Mua sắm ngay</a></div></div>`;
+            return;
+          }
+
+          const user = Auth.getUser() || {};
+          root.innerHTML = `
+          <div class="cart-layout">
+            <div class="card card-pad">
+              <h3 style="font-size:16px;margin-bottom:16px">Thông tin giao hàng</h3>
+              <div id="form-error" class="alert alert-error" style="display:none;margin-bottom:16px"></div>
+              <form id="checkout-form">
+                <div class="field">
+                  <label class="label">Họ tên người nhận</label>
+                  <input class="input" id="recipient_name" value="${esc(user.full_name || "")}" required>
+                </div>
+                <div class="field">
+                  <label class="label">Số điện thoại</label>
+                  <input class="input" id="recipient_phone" value="${esc(user.phone || "")}" placeholder="09xxxxxxxx" required>
+                </div>
+                <div class="field">
+                  <label class="label">Địa chỉ nhận hàng</label>
+                  <textarea class="textarea" id="shipping_address" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành..." required>${esc(user.address || "")}</textarea>
+                </div>
+                <div class="field">
+                  <label class="label">Phương thức thanh toán</label>
+                  <div class="flex" style="gap:8px">
+                    <span class="badge badge-confirmed" style="padding:9px 14px;font-size:13.5px"> Thanh toán khi nhận hàng (COD)</span>
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-block btn-lg" type="submit">Đặt hàng</button>
+              </form>
+            </div>
+
+            <div class="card card-pad" style="position:sticky;top:80px">
+              <h3 style="font-size:16px;margin-bottom:14px">Đơn hàng của bạn</h3>
+              ${items
+                .map(
+                  (it) => `
+                <div class="order-item" style="padding:10px 0">
+                  <div class="order-thumb">${mediaHtml(it.image_url, it.name, "img-placeholder")}</div>
+                  <div class="grow">
+                    <div class="small bold">${esc(it.name)}</div>
+                    <div class="small muted">SL: ${it.quantity}</div>
+                  </div>
+                  <div class="small bold">${fmtMoney(it.line_total)}</div>
+                </div>`,
+                )
+                .join("")}
+              <div class="summary-row total"><span>Tổng tiền</span><span>${fmtMoney(res.data.total)}</span></div>
+            </div>
+          </div>`;
+
+          document
+            .getElementById("checkout-form")
+            .addEventListener("submit", async (e) => {
+              e.preventDefault();
+              const errBox = document.getElementById("form-error");
+              errBox.style.display = "none";
+              const payload = {
+                recipient_name: document
+                  .getElementById("recipient_name")
+                  .value.trim(),
+                recipient_phone: document
+                  .getElementById("recipient_phone")
+                  .value.trim(),
+                shipping_address: document
+                  .getElementById("shipping_address")
+                  .value.trim(),
+                payment_method: "COD",
+              };
+              const btn = e.target.querySelector("button[type=submit]");
+              btn.disabled = true;
+              btn.textContent = "Đang xử lý...";
+              try {
+                const orderRes = await API.post("/api/orders", payload);
+                toast(orderRes.message, "success");
+                refreshCartBadge();
+                setTimeout(() => (window.location.href = "/orders.html"), 400);
+              } catch (err) {
+                errBox.textContent = err.message;
+                errBox.style.display = "flex";
+                btn.disabled = false;
+                btn.textContent = "Đặt hàng";
+              }
+            });
+        } catch (e) {
+          root.innerHTML = `<div class="card"><div class="empty"><div class="ico">⚠</div><h3>Lỗi</h3><p>${esc(e.message)}</p></div></div>`;
+        }
+      }
+
+      load();
+    </script>
+  </body>
+</html>
