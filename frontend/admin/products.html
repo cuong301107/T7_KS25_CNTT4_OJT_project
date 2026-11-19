@@ -169,6 +169,10 @@
             <label class="label">URL hình ảnh <span class="muted">(tùy chọn)</span></label>
             <input class="input" id="f-image" value="${esc(prod ? (prod.image_url || '') : '')}" placeholder="https://...">
           </div>
+          <div class="field">
+            <label class="label">Hoặc tải ảnh từ máy</label>
+            <input class="input" id="f-image-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+          </div>
           <div id="form-error" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
           <div class="modal-foot" style="padding:0;border:none;margin-top:6px">
             <button type="button" class="btn btn-outline" onclick="closeModal()">Hủy</button>
@@ -180,13 +184,25 @@
         e.preventDefault();
         const errBox = document.getElementById('form-error');
         errBox.style.display = 'none';
+        let imageUrl = document.getElementById('f-image').value.trim();
+        const imageFile = document.getElementById('f-image-file').files[0];
+        try {
+          if (imageFile) {
+            const upload = await API.upload('/api/admin/products/upload-image', 'image', imageFile);
+            imageUrl = upload.data.image_url;
+          }
+        } catch (err) {
+          errBox.textContent = err.message;
+          errBox.style.display = 'flex';
+          return;
+        }
         const payload = {
           name: document.getElementById('f-name').value.trim(),
           category_id: parseInt(document.getElementById('f-category').value),
           price: parseFloat(document.getElementById('f-price').value),
           stock_quantity: parseInt(document.getElementById('f-stock').value),
           description: document.getElementById('f-desc').value.trim(),
-          image_url: document.getElementById('f-image').value.trim(),
+          image_url: imageUrl,
           status: document.getElementById('f-status').value
         };
         try {

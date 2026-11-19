@@ -42,5 +42,23 @@ const API = {
   post: (url, body) => API.request('POST', url, body),
   put: (url, body) => API.request('PUT', url, body),
   patch: (url, body) => API.request('PATCH', url, body),
-  del: (url) => API.request('DELETE', url)
+  del: (url) => API.request('DELETE', url),
+
+  async upload(url, fieldName, file) {
+    const form = new FormData();
+    form.append(fieldName, file);
+    const headers = {};
+    const token = API.getToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
+
+    let res;
+    try {
+      res = await fetch(url, { method: 'POST', headers, body: form });
+    } catch (e) {
+      throw new Error('Không thể tải ảnh lên máy chủ.');
+    }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error((data && data.message) || `Tải ảnh thất bại (${res.status}).`);
+    return data;
+  }
 };

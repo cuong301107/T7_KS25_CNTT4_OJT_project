@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const pool = require('./config/db');
 const env = require('./config/env');
 const routes = require('./routes');
@@ -15,6 +16,10 @@ app.use(express.urlencoded({ extended: true }));
 // Phuc vu frontend tinh (thu muc frontend nam cung cap voi backend)
 const frontendDir = path.join(__dirname, '..', '..', 'frontend');
 app.use(express.static(frontendDir));
+
+const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+app.use('/uploads', express.static(uploadDir));
 
 // Health check
 app.get('/api/health', async (req, res) => {
@@ -31,9 +36,19 @@ app.use('/api', routes);
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(env.port, () => {
-  console.log('==============================================');
-  console.log('  ShopEase API dang chay tai:');
-  console.log(`  http://localhost:${env.port}`);
-  console.log('==============================================');
-});
+async function startServer() {
+  try {
+    await pool.query('ALTER TABLE products MODIFY image_url TEXT NULL');
+  } catch (e) {
+    console.warn(`Không thể cập nhật cột image_url: ${e.message}`);
+  }
+
+  app.listen(env.port, () => {
+    console.log('==============================================');
+    console.log('  ShopEase API dang chay tai:');
+    console.log(`  http://localhost:${env.port}`);
+    console.log('==============================================');
+  });
+}
+
+startServer();

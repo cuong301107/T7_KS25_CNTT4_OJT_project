@@ -1,6 +1,15 @@
 const pool = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
+const fs = require('fs');
+const path = require('path');
+
+function deleteUploadedImage(imageUrl) {
+  if (!imageUrl || !imageUrl.startsWith('/uploads/')) return;
+  const filename = path.basename(imageUrl);
+  const filePath = path.join(__dirname, '..', '..', 'uploads', filename);
+  fs.unlink(filePath, () => {});
+}
 
 /* ------------------------------------------------------------------ *
  *  Dashboard / thong ke
@@ -166,10 +175,14 @@ exports.updateProduct = asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id);
   const { category_id, name, description, price, stock_quantity, image_url, status } = req.body || {};
 
-  const [rows] = await pool.query('SELECT id FROM products WHERE id = ?', [id]);
+  const [rows] = await pool.query('SELECT id, image_url FROM products WHERE id = ?', [id]);
   if (!rows.length) throw new ApiError(404, 'Sản phẩm không tồn tại.');
+  const oldImageUrl = rows[0].image_url;
 
   if (name !== undefined && !name.trim()) throw new ApiError(400, 'Tên sản phẩm không được để trống.');
+  if (status !== undefined && status !== 'ACTIVE' && status !== 'INACTIVE') {
+    throw new ApiError(400, 'Trạng thái không hợp lệ.');
+  }
   if (price !== undefined) {
     const p = Number(price);
     if (!Number.isFinite(p) || p <= 0) throw new ApiError(400, 'Giá sản phẩm phải lớn hơn 0.');
@@ -183,34 +196,47 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     if (!cats.length) throw new ApiError(400, 'Danh mục không tồn tại.');
   }
 
-  await pool.query(
-    `UPDATE products SET
-       category_id = COALESCE(?, category_id),
-       name = COALESCE(?, name),
-       description = ?,
-       price = COALESCE(?, price),
-       stock_quantity = COALESCE(?, stock_quantity),
-       image_url = ?,
-       status = COALESCE(?, status)
-     WHERE id = ?`,
-    [
-      category_id || null,
-      name ? name.trim() : null,
-      description !== undefined ? (description ? String(description).trim() : null) : undefined,
-      price !== undefined ? Number(price) : null,
-      stock_quantity !== undefined ? Number(stock_quantity) : null,
-      image_url !== undefined ? (image_url ? String(image_url).trim() : null) : undefined,
-      status || null,
-      id
-    ]
-  );
-
+  const updates = [];
+  const values = [];
+  if (category_id !== undefined) {
+    updates.push('category_id = ?');
+    values.push(category_id);
+  }
+  if (name !== undefined) {
+    updates.push('name = ?');
+    values.push(name.trim());
+  }
+  if (description !== undefined) {
+    updates.push('description = ?');
+    values.push(description ? String(description).trim() : null);
+  }
+  if (price !== undefined) {
+    updates.push('price = ?');
+    values.push(Number(price));
+  }
+  if (stock_quantity !== undefined) {
+    updates.push('stock_quantity = ?');
+    values.push(Number(stock_quantity));
+  }
+  if (image_url !== undefined) {
+    updates.push('image_url = ?');
+    values.push(image_url ? String(image_url).trim() : null);
+  }
+  if (status !== undefined) {
+    updates.push('status = ?');
+    values.push(status);
+  }
+  if (!updates.length) throw new ApiError(400, 'Không có thông tin nào để cập nhật.');
+  await pool.query(`UPDATE products SET ${updates.join(', ')} WHERE id = ?`, [...values, id]);
+  if (image_url !== undefined && image_url !== oldImageUrl) {
+    deleteUploadedImage(oldImageUrl);
+  }
   res.json({ success: true, message: 'Đã cập nhật sản phẩm.' });
 });
 
 exports.deleteProduct = asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id);
-  const [rows] = await pool.query('SELECT id FROM products WHERE id = ?', [id]);
+  const [rows] = await pool.query('SELECT id, image_url FROM products WHERE id = ?', [id]);
   if (!rows.length) throw new ApiError(404, 'Sản phẩm không tồn tại.');
 
   const [[{ used }]] = await pool.query(
@@ -222,6 +248,7 @@ exports.deleteProduct = asyncHandler(async (req, res) => {
   }
 
   await pool.query('DELETE FROM products WHERE id = ?', [id]);
+  deleteUploadedImage(rows[0].image_url);
   res.json({ success: true, message: 'Đã xóa sản phẩm.' });
 });
 

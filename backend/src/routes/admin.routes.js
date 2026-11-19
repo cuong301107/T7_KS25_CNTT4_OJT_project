@@ -1,9 +1,39 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const router = express.Router();
 const admin = require('../controllers/adminController');
 const { requireAuth, adminOnly } = require('../middlewares/auth');
 
 router.use(requireAuth, adminOnly);
+
+const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDir,
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    }
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!/^image\/(jpeg|png|gif|webp)$/.test(file.mimetype)) {
+      return cb(new Error('Chỉ hỗ trợ ảnh JPG, PNG, GIF hoặc WebP.'));
+    }
+    cb(null, true);
+  }
+});
+
+router.post('/products/upload-image', upload.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: 'Vui lòng chọn ảnh.' });
+  res.status(201).json({
+    success: true,
+    data: { image_url: `/uploads/${req.file.filename}` }
+  });
+});
 
 // Dashboard
 router.get('/stats', admin.stats);
