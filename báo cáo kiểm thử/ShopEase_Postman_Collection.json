@@ -1,0 +1,327 @@
+{
+  "info": {
+    "_postman_id": "4b5afeb4-0ddc-463f-9abf-3ced7ba047cc",
+    "name": "ShopEase API - Core Flows and Security Checks",
+    "description": "Smoke tests for auth, cart/order lifecycle, ownership, authorization, JWT and input validation. Run only against a local/test database. Tests create QA users and a cancelled order.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "customerEmail", "value": "" },
+    { "key": "customerPassword", "value": "TestPass@123" },
+    { "key": "customerToken", "value": "" },
+    { "key": "secondaryEmail", "value": "" },
+    { "key": "secondaryPassword", "value": "TestPass@123" },
+    { "key": "secondaryToken", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "adminEmail", "value": "" },
+    { "key": "adminPassword", "value": "" },
+    { "key": "adminToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 - Health check",
+      "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('API and database are healthy', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.expect(pm.response.json().database).to.eql('connected');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "02 - Public products and choose in-stock product",
+      "request": { "method": "GET", "url": "{{baseUrl}}/products?limit=50" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Product listing is public', function () {",
+        "  pm.response.to.have.status(200);",
+        "  const products = pm.response.json().data || [];",
+        "  const product = products.find(function (item) { return item.stock_quantity > 0; });",
+        "  pm.expect(product, 'in-stock product fixture').to.exist;",
+        "  pm.collectionVariables.set('productId', product.id);",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "03 - Reject malformed email",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"full_name\":\"QA\",\"email\":\"bad-email\",\"password\":\"TestPass@123\"}" },
+        "url": "{{baseUrl}}/auth/register"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Malformed email is rejected', function () { pm.response.to.have.status(400); });"
+      ] } }]
+    },
+    {
+      "name": "04 - Reject non-string password (expected to expose current validation bug)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"full_name\":\"QA\",\"email\":\"number-password@example.test\",\"password\":12345678}" },
+        "url": "{{baseUrl}}/auth/register"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Non-string password is rejected as bad input', function () { pm.response.to.have.status(400); });"
+      ] } }]
+    },
+    {
+      "name": "05 - Register primary test customer",
+      "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+        "pm.collectionVariables.set('customerEmail', 'qa-' + pm.variables.replaceIn('{{$guid}}') + '@example.test');"
+      ] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Customer is created and password hash is not exposed', function () {",
+        "  pm.response.to.have.status(201);",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.token).to.be.a('string');",
+        "  pm.expect(body.user).not.to.have.property('password_hash');",
+        "  pm.collectionVariables.set('customerToken', body.token);",
+        "});"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"full_name\":\"Postman QA Customer\",\"email\":\"{{customerEmail}}\",\"password\":\"{{customerPassword}}\",\"confirm_password\":\"{{customerPassword}}\"}" },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "06 - Login rejects wrong password",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{customerEmail}}\",\"password\":\"WrongPass@123\"}" },
+        "url": "{{baseUrl}}/auth/login"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Wrong password is rejected', function () { pm.response.to.have.status(401); });"
+      ] } }]
+    },
+    {
+      "name": "07 - Login primary test customer",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{customerEmail}}\",\"password\":\"{{customerPassword}}\"}" },
+        "url": "{{baseUrl}}/auth/login"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Valid credentials return JWT', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.collectionVariables.set('customerToken', pm.response.json().token);",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "08 - Profile requires authentication",
+      "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Missing JWT is rejected', function () { pm.response.to.have.status(401); });"
+      ] } }]
+    },
+    {
+      "name": "09 - Reject malformed JWT",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer not-a-valid-token" }],
+        "url": "{{baseUrl}}/auth/me"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Malformed JWT is rejected', function () { pm.response.to.have.status(401); });"
+      ] } }]
+    },
+    {
+      "name": "10 - Read profile with valid JWT",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/auth/me"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Valid JWT identifies current user', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.expect(pm.response.json().data.email).to.eql(pm.collectionVariables.get('customerEmail'));",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "11 - Customer cannot access admin API",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/admin/stats"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Customer is forbidden from admin API', function () { pm.response.to.have.status(403); });"
+      ] } }]
+    },
+    {
+      "name": "12 - Register second customer for ownership checks",
+      "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+        "pm.collectionVariables.set('secondaryEmail', 'qa-other-' + pm.variables.replaceIn('{{$guid}}') + '@example.test');"
+      ] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Second customer is created', function () {",
+        "  pm.response.to.have.status(201);",
+        "  pm.collectionVariables.set('secondaryToken', pm.response.json().token);",
+        "});"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"full_name\":\"Postman QA Other\",\"email\":\"{{secondaryEmail}}\",\"password\":\"{{secondaryPassword}}\",\"confirm_password\":\"{{secondaryPassword}}\"}" },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "13 - Read empty cart",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/cart"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('New customer cart starts empty', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.expect(pm.response.json().data.items).to.have.length(0);",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "14 - Add product to cart",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"product_id\":\"{{productId}}\",\"quantity\":1}" },
+        "url": "{{baseUrl}}/cart"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Product is added to cart', function () { pm.response.to.have.status(200); });"
+      ] } }]
+    },
+    {
+      "name": "15 - Reject cart quantity above stock",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"product_id\":\"{{productId}}\",\"quantity\":999999}" },
+        "url": "{{baseUrl}}/cart"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Quantity above stock is rejected', function () { pm.response.to.have.status(400); });"
+      ] } }]
+    },
+    {
+      "name": "16 - Checkout",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"recipient_name\":\"Postman QA Customer\",\"recipient_phone\":\"0900000000\",\"shipping_address\":\"Local test address\",\"payment_method\":\"COD\"}" },
+        "url": "{{baseUrl}}/orders"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Checkout creates a pending order', function () {",
+        "  pm.response.to.have.status(201);",
+        "  pm.collectionVariables.set('orderId', pm.response.json().data.id);",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "17 - Owner can read order",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/orders/{{orderId}}"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Owner can read own order', function () { pm.response.to.have.status(200); });"
+      ] } }]
+    },
+    {
+      "name": "18 - Other customer cannot read order",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{secondaryToken}}" }],
+        "url": "{{baseUrl}}/orders/{{orderId}}"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Other customer cannot read order', function () { pm.response.to.have.status(404); });"
+      ] } }]
+    },
+    {
+      "name": "19 - Other customer cannot cancel order",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{secondaryToken}}" }],
+        "url": "{{baseUrl}}/orders/{{orderId}}/cancel"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Other customer cannot cancel order', function () { pm.response.to.have.status(403); });"
+      ] } }]
+    },
+    {
+      "name": "20 - Owner cancels pending order",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/orders/{{orderId}}/cancel"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Owner can cancel pending order', function () { pm.response.to.have.status(200); });"
+      ] } }]
+    },
+    {
+      "name": "21 - Reject repeated cancellation",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/orders/{{orderId}}/cancel"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Cancelled order cannot be cancelled again', function () { pm.response.to.have.status(400); });"
+      ] } }]
+    },
+    {
+      "name": "22 - Cart is empty after checkout",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+        "url": "{{baseUrl}}/cart"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Checkout cleared the cart', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.expect(pm.response.json().data.items).to.have.length(0);",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "23 - Admin login (configure local credentials first)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}" },
+        "url": "{{baseUrl}}/auth/login"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Admin credentials return JWT', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.expect(pm.response.json().user.position).to.eql('ADMIN');",
+        "  pm.collectionVariables.set('adminToken', pm.response.json().token);",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "24 - Admin can read dashboard stats",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/admin/stats"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Admin can access dashboard stats', function () { pm.response.to.have.status(200); });"
+      ] } }]
+    }
+  ]
+}
