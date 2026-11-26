@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Trang chủ</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Mua sắm đơn giản,<br>thanh toán khi nhận hàng</h1>
+      <p>Khám phá hàng ngàn sản phẩm chất lượng với mức giá tốt. Giao hàng nhanh, thanh toán COD tận nơi.</p>
+      <a class="btn btn-primary btn-lg" href="/products.html">Mua sắm ngay →</a>
+    </div>
+  </section>
+
+  <main class="page">
+    <div class="container">
+      <div class="section-title">
+        <h2>Danh mục nổi bật</h2>
+      </div>
+      <div class="chips" id="category-chips" style="margin-bottom: 30px;">
+        <span class="muted small">Đang tải...</span>
+      </div>
+
+      <div class="section-title">
+        <h2>Sản phẩm mới</h2>
+        <a class="muted small" href="/products.html">Xem tất cả →</a>
+      </div>
+      <div class="product-grid" id="product-grid">
+        <div class="empty"><div class="ico">⋯</div><p>Đang tải sản phẩm...</p></div>
+      </div>
+    </div>
+  </main>
+
+  <footer id="app-footer"></footer>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    (async function () {
+      // Danh mục
+      try {
+        const cats = await API.get('/api/categories');
+        const wrap = document.getElementById('category-chips');
+        wrap.innerHTML = `<a class="chip active" href="/products.html">Tất cả</a>` +
+          cats.data.map((c) => `<a class="chip" href="/products.html?category=${c.id}">${esc(c.name)}</a>`).join('');
+      } catch (e) {
+        document.getElementById('category-chips').innerHTML = '<span class="muted small">Không tải được danh mục.</span>';
+      }
+
+      // Sản phẩm mới
+      try {
+        const res = await API.get('/api/products?limit=8&sort=newest');
+        const grid = document.getElementById('product-grid');
+        if (!res.data.length) {
+          grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="ico">🛍</div><h3>Chưa có sản phẩm</h3><p>Vui lòng quay lại sau.</p></div>';
+        } else {
+          grid.innerHTML = res.data.map(productCardHtml).join('');
+        }
+      } catch (e) {
+        document.getElementById('product-grid').innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="ico">⚠</div><h3>Không tải được sản phẩm</h3><p>${esc(e.message)}</p></div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

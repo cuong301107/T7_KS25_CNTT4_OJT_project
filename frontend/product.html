@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Chi tiết sản phẩm</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page">
+    <div class="container" id="detail-root">
+      <div class="empty"><p>Đang tải sản phẩm...</p></div>
+    </div>
+  </main>
+
+  <footer id="app-footer"></footer>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    const productId = new URLSearchParams(window.location.search).get('id');
+    let currentQty = 1;
+    let productData = null;
+
+    function starsHtml(rating) {
+      let s = '<span class="stars small">';
+      for (let i = 1; i <= 5; i++) s += `<span class="${i <= rating ? '' : 'off'}">★</span>`;
+      s += '</span>';
+      return s;
+    }
+
+    async function load() {
+      const root = document.getElementById('detail-root');
+      try {
+        const res = await API.get('/api/products/' + productId);
+        productData = res.data;
+        const p = res.data;
+        const soldOut = p.stock_quantity <= 0;
+        document.title = 'ShopEase — ' + p.name;
+
+        root.innerHTML = `
+          <div class="detail-grid">
+            <div class="detail-media">${mediaHtml(p.image_url, p.name, 'img-placeholder')}</div>
+            <div class="detail-info">
+              <div class="detail-meta">
+                <a class="chip" href="/products.html?category=${p.category_id}">${esc(p.category_name)}</a>
+                <span class="badge ${soldOut ? 'badge-inactive' : 'badge-active'}">${soldOut ? 'Hết hàng' : 'Còn ' + p.stock_quantity + ' sản phẩm'}</span>
+              </div>
+              <h1>${esc(p.name)}</h1>
+              <div class="detail-price">${fmtMoney(p.price)}</div>
+              ${p.review_count ? `<div class="flex" style="margin-bottom:8px">${starsHtml(p.avg_rating)}<span class="muted small">${p.avg_rating} / 5 (${p.review_count} đánh giá)</span></div>` : ''}
+              <div class="detail-desc">${esc(p.description || 'Chưa có mô tả sản phẩm.')}</div>
+
+              <div class="flex" style="margin-top:22px">
+                <div class="qty-stepper">
+                  <button onclick="changeQty(-1)">−</button>
+                  <input type="text" id="qty-input" value="1" inputmode="numeric">
+                  <button onclick="changeQty(1)">+</button>
+                </div>
+                <button class="btn btn-primary btn-lg" id="add-btn" ${soldOut ? 'disabled' : ''} onclick="addDetail()">
+                  ${soldOut ? 'Hết hàng' : 'Thêm vào giỏ hàng'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-3">
+            <div class="card-pad">
+              <div class="section-title" style="margin-top:0">
+                <h2>Đánh giá sản phẩm</h2>
+              </div>
+              <div id="review-list"></div>
+              <div id="review-form" class="mt-3"></div>
+            </div>
+          </div>`;
+
+        document.getElementById('qty-input').addEventListener('change', (e) => {
+          const v = parseInt(e.target.value);
+          currentQty = isNaN(v) || v < 1 ? 1 : Math.min(v, p.stock_quantity);
+          document.getElementById('qty-input').value = currentQty;
+        });
+
+        loadReviews();
+      } catch (e) {
+        root.innerHTML = `<div class="empty"><div class="ico">⚠</div><h3>Không tải được sản phẩm</h3><p>${esc(e.message)}</p><a class="btn btn-outline mt-2" href="/products.html">Quay lại</a></div>`;
+      }
+    }
+
+    function changeQty(delta) {
+      const input = document.getElementById('qty-input');
+      const max = productData ? productData.stock_quantity : 999;
+      currentQty = Math.max(1, Math.min(currentQty + delta, max));
+      input.value = currentQty;
+    }
+    window.changeQty = changeQty;
+
+    function addDetail() {
+      addToCart(null, productId, currentQty);
+    }
+    window.addDetail = addDetail;
+
+    async function loadReviews() {
+      const list = document.getElementById('review-list');
+      try {
+        const res = await API.get(`/api/products/${productId}/reviews`);
+        if (!res.data.length) {
+          list.innerHTML = '<p class="muted">Chưa có đánh giá nào.</p>';
+        } else {
+          list.innerHTML = res.data.map((r) => `
+            <div class="order-item" style="padding:14px 0">
+              <div class="grow">
+                <div class="flex-between">
+                  <span class="bold small">${esc(r.full_name)}</span>
+                  <span class="muted small">${fmtDate(r.created_at)}</span>
+                </div>
+                ${starsHtml(r.rating)}
+                ${r.comment ? `<p style="margin-top:6px;color:var(--text-2)">${esc(r.comment)}</p>` : ''}
+              </div>
+            </div>`).join('');
+        }
+        renderReviewForm();
+      } catch (e) {
+        list.innerHTML = '<p class="muted">Không tải được đánh giá.</p>';
+        renderReviewForm();
+      }
+    }
+
+    function renderReviewForm() {
+      const box = document.getElementById('review-form');
+      if (!Auth.isLoggedIn()) {
+        box.innerHTML = '<p class="muted small"><a href="/login.html" style="text-decoration:underline">Đăng nhập</a> để viết đánh giá.</p>';
+        return;
+      }
+      if (Auth.isAdmin()) {
+        box.innerHTML = '';
+        return;
+      }
+      box.innerHTML = `
+        <h3 style="font-size:16px;margin-bottom:10px">Viết đánh giá của bạn</h3>
+        <div class="rating-input" id="rating-input">
+          ${[1,2,3,4,5].map(i => `<span data-r="${i}">★</span>`).join('')}
+        </div>
+        <textarea class="textarea mt-2" id="review-comment" placeholder="Chia sẻ trải nghiệm của bạn về sản phẩm..."></textarea>
+        <button class="btn btn-primary mt-2" id="review-submit">Gửi đánh giá</button>`;
+
+      let selected = 5;
+      const stars = box.querySelectorAll('#rating-input span');
+      function paint() {
+        stars.forEach((s) => s.classList.toggle('on', parseInt(s.getAttribute('data-r')) <= selected));
+      }
+      stars.forEach((s) => {
+        s.addEventListener('click', () => { selected = parseInt(s.getAttribute('data-r')); paint(); });
+      });
+      paint();
+
+      document.getElementById('review-submit').addEventListener('click', async () => {
+        const comment = document.getElementById('review-comment').value.trim();
+        try {
+          await API.post(`/api/products/${productId}/reviews`, { rating: selected, comment });
+          toast('Cảm ơn bạn đã đánh giá!', 'success');
+          loadReviews();
+        } catch (e) {
+          toast(e.message, 'error');
+        }
+      });
+    }
+
+    if (productId) load();
+  </script>
+</body>
+</html>

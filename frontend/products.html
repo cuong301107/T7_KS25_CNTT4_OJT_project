@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Sản phẩm</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+  <header id="app-header"></header>
+
+  <main class="page">
+    <div class="container">
+      <div class="section-title">
+        <h1>Sản phẩm</h1>
+        <p id="result-count"></p>
+      </div>
+
+      <div class="filter-bar">
+        <div class="chips" id="category-chips"></div>
+        <div class="spacer"></div>
+        <select class="select" id="sort-select">
+          <option value="newest">Mới nhất</option>
+          <option value="price_asc">Giá tăng dần</option>
+          <option value="price_desc">Giá giảm dần</option>
+          <option value="name_asc">Tên A → Z</option>
+        </select>
+      </div>
+
+      <div class="product-grid" id="product-grid">
+        <div class="empty" style="grid-column:1/-1"><p>Đang tải...</p></div>
+      </div>
+
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+
+  <footer id="app-footer"></footer>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    let q = params.get('q') || '';
+    let category = params.get('category') || '';
+    let sort = params.get('sort') || 'newest';
+    let page = parseInt(params.get('page')) || 1;
+
+    if (q) {
+      const inp = document.getElementById('global-search-input');
+      if (inp) inp.value = q;
+    }
+    document.getElementById('sort-select').value = sort;
+
+    function buildQuery() {
+      const p = new URLSearchParams();
+      if (q) p.set('q', q);
+      if (category) p.set('category', category);
+      if (sort && sort !== 'newest') p.set('sort', sort);
+      if (page > 1) p.set('page', page);
+      return p.toString();
+    }
+
+    async function loadCategories() {
+      try {
+        const cats = await API.get('/api/categories');
+        const wrap = document.getElementById('category-chips');
+        wrap.innerHTML = `<a class="chip ${!category ? 'active' : ''}" href="#" data-cat="">Tất cả</a>` +
+          cats.data.map((c) =>
+            `<a class="chip ${String(category) === String(c.id) ? 'active' : ''}" href="#" data-cat="${c.id}">${esc(c.name)}</a>`
+          ).join('');
+        wrap.querySelectorAll('.chip').forEach((chip) => {
+          chip.addEventListener('click', (e) => {
+            e.preventDefault();
+            category = chip.getAttribute('data-cat');
+            page = 1;
+            updateUrl();
+          });
+        });
+      } catch (e) {
+        document.getElementById('category-chips').innerHTML = '<span class="muted small">Không tải được danh mục.</span>';
+      }
+    }
+
+    function updateUrl() {
+      history.pushState(null, '', '/products.html?' + buildQuery());
+      loadProducts();
+    }
+
+    async function loadProducts() {
+      const grid = document.getElementById('product-grid');
+      const count = document.getElementById('result-count');
+      const pager = document.getElementById('pagination');
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><p>Đang tải...</p></div>';
+      pager.innerHTML = '';
+
+      try {
+        const p = new URLSearchParams();
+        p.set('page', page);
+        p.set('limit', '12');
+        if (q) p.set('q', q);
+        if (category) p.set('category', category);
+        if (sort) p.set('sort', sort);
+
+        const res = await API.get('/api/products?' + p.toString());
+        count.textContent = res.pagination.total + ' sản phẩm';
+
+        if (!res.data.length) {
+          grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="ico">🔍</div><h3>Không tìm thấy sản phẩm</h3><p>Thử từ khóa hoặc bộ lọc khác.</p></div>';
+          return;
+        }
+        grid.innerHTML = res.data.map(productCardHtml).join('');
+
+        const totalPages = res.pagination.totalPages;
+        if (totalPages > 1) {
+          let html = `<button ${page <= 1 ? 'disabled' : ''} data-p="${page - 1}">←</button>`;
+          for (let i = 1; i <= totalPages; i++) {
+            html += `<button class="${i === page ? 'active' : ''}" data-p="${i}">${i}</button>`;
+          }
+          html += `<button ${page >= totalPages ? 'disabled' : ''} data-p="${page + 1}">→</button>`;
+          pager.innerHTML = html;
+          pager.querySelectorAll('button').forEach((b) => {
+            b.addEventListener('click', () => {
+              const np = parseInt(b.getAttribute('data-p'));
+              if (np && np !== page) {
+                page = np;
+                updateUrl();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            });
+          });
+        }
+      } catch (e) {
+        grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="ico">⚠</div><h3>Lỗi tải dữ liệu</h3><p>${esc(e.message)}</p></div>`;
+      }
+    }
+
+    document.getElementById('sort-select').addEventListener('change', (e) => {
+      sort = e.target.value;
+      page = 1;
+      updateUrl();
+    });
+
+    window.addEventListener('popstate', () => {
+      const p = new URLSearchParams(window.location.search);
+      q = p.get('q') || '';
+      category = p.get('category') || '';
+      sort = p.get('sort') || 'newest';
+      page = parseInt(p.get('page')) || 1;
+      document.getElementById('sort-select').value = sort;
+      loadCategories();
+      loadProducts();
+    });
+
+    loadCategories();
+    loadProducts();
+  </script>
+</body>
+</html>
