@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase Admin — Danh mục</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-side" id="admin-sidebar"></aside>
+    <div class="admin-main">
+      <div class="admin-topbar">
+        <h1>Quản lý danh mục</h1>
+        <div class="flex" id="admin-topbar-actions"></div>
+      </div>
+
+      <div class="flex" style="margin-bottom:16px">
+        <div class="grow"></div>
+        <button class="btn btn-primary" onclick="openForm(null)">+ Thêm danh mục</button>
+      </div>
+
+      <div class="card">
+        <table class="admin-table">
+          <thead>
+            <tr><th>#</th><th>Tên danh mục</th><th>Mô tả</th><th>Sản phẩm</th><th style="text-align:right">Hành động</th></tr>
+          </thead>
+          <tbody id="cat-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script src="/assets/js/admin.js"></script>
+  <script>
+    const catsMap = {};
+
+    async function load() {
+      const tbody = document.getElementById('cat-tbody');
+      try {
+        const res = await API.get('/api/admin/categories');
+        res.data.forEach((c) => (catsMap[c.id] = c));
+        if (!res.data.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="muted center">Chưa có danh mục nào.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = res.data.map((c) => `
+          <tr>
+            <td class="muted">#${c.id}</td>
+            <td class="bold">${esc(c.name)}</td>
+            <td class="muted">${esc(c.description || '—')}</td>
+            <td>${c.product_count}</td>
+            <td>
+              <div class="table-actions" style="justify-content:flex-end">
+                <button class="btn btn-outline btn-sm" onclick="openForm(${c.id})">Sửa</button>
+                <button class="btn btn-danger-soft btn-sm" onclick="deleteCat(${c.id})">Xóa</button>
+              </div>
+            </td>
+          </tr>`).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" class="muted center">Lỗi: ${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function openForm(id) {
+      const c = id ? catsMap[id] : null;
+      const isEdit = !!c;
+      openModal(isEdit ? 'Sửa danh mục' : 'Thêm danh mục', `
+        <form id="cat-form">
+          <div class="field">
+            <label class="label">Tên danh mục</label>
+            <input class="input" id="f-name" value="${esc(c ? c.name : '')}" required>
+          </div>
+          <div class="field">
+            <label class="label">Mô tả</label>
+            <textarea class="textarea" id="f-desc">${esc(c ? (c.description || '') : '')}</textarea>
+          </div>
+          <div id="form-error" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
+          <div class="modal-foot" style="padding:0;border:none;margin-top:6px">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Hủy</button>
+            <button type="submit" class="btn btn-primary">${isEdit ? 'Lưu thay đổi' : 'Thêm danh mục'}</button>
+          </div>
+        </form>`);
+
+      document.getElementById('cat-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errBox = document.getElementById('form-error');
+        errBox.style.display = 'none';
+        const payload = {
+          name: document.getElementById('f-name').value.trim(),
+          description: document.getElementById('f-desc').value.trim()
+        };
+        try {
+          if (isEdit) await API.put('/api/admin/categories/' + c.id, payload);
+          else await API.post('/api/admin/categories', payload);
+          toast(isEdit ? 'Đã cập nhật danh mục.' : 'Đã thêm danh mục.', 'success');
+          closeModal();
+          load();
+        } catch (err) {
+          errBox.textContent = err.message;
+          errBox.style.display = 'flex';
+        }
+      });
+    }
+    window.openForm = openForm;
+
+    async function deleteCat(id) {
+      if (!confirm('Xóa danh mục này?')) return;
+      try {
+        await API.del('/api/admin/categories/' + id);
+        toast('Đã xóa danh mục.', 'success');
+        load();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.deleteCat = deleteCat;
+
+    load();
+  </script>
+</body>
+</html>

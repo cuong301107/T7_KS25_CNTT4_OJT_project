@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase Admin — Đơn hàng</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%2317191d'/><text x='50' y='68' font-size='52' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>S</text></svg>">
+  <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-side" id="admin-sidebar"></aside>
+    <div class="admin-main">
+      <div class="admin-topbar">
+        <h1>Quản lý đơn hàng</h1>
+        <div class="flex" id="admin-topbar-actions"></div>
+      </div>
+
+      <div class="flex" style="gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <input class="input" id="search-input" placeholder="Tìm mã đơn / khách hàng..." style="max-width:280px">
+        <select class="select" id="status-filter">
+          <option value="">Mọi trạng thái</option>
+          <option value="PENDING">Chờ xác nhận</option>
+          <option value="CONFIRMED">Đã xác nhận</option>
+          <option value="SHIPPING">Đang giao</option>
+          <option value="COMPLETED">Hoàn thành</option>
+          <option value="CANCELLED">Đã hủy</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <table class="admin-table">
+          <thead>
+            <tr><th>Mã đơn</th><th>Khách hàng</th><th>Tổng tiền</th><th>Trạng thái</th><th>Ngày đặt</th><th style="text-align:right">Hành động</th></tr>
+          </thead>
+          <tbody id="order-tbody"></tbody>
+        </table>
+        <div class="pagination" id="pagination" style="padding:16px"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/common.js"></script>
+  <script src="/assets/js/admin.js"></script>
+  <script>
+    let page = 1, q = '', status = '';
+
+    const NEXT = {
+      PENDING: [
+        { v: 'CONFIRMED', label: 'Xác nhận đơn', cls: 'btn-primary' },
+        { v: 'CANCELLED', label: 'Hủy đơn', cls: 'btn-danger-soft' }
+      ],
+      CONFIRMED: [{ v: 'SHIPPING', label: 'Bắt đầu giao', cls: 'btn-primary' }],
+      SHIPPING: [{ v: 'COMPLETED', label: 'Hoàn thành', cls: 'btn-primary' }],
+      COMPLETED: [],
+      CANCELLED: []
+    };
+
+    async function load() {
+      const tbody = document.getElementById('order-tbody');
+      const pager = document.getElementById('pagination');
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">Đang tải...</td></tr>';
+      try {
+        const p = new URLSearchParams({ page, limit: '10' });
+        if (q) p.set('q', q);
+        if (status) p.set('status', status);
+        const res = await API.get('/api/admin/orders?' + p.toString());
+
+        if (!res.data.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="muted center">Không có đơn hàng nào.</td></tr>';
+          pager.innerHTML = '';
+          return;
+        }
+        tbody.innerHTML = res.data.map((o) => `
+          <tr>
+            <td class="bold">${esc(o.order_code)}</td>
+            <td>
+              <div class="bold">${esc(o.customer)}</div>
+              <div class="muted small">${esc(o.recipient_phone)}</div>
+            </td>
+            <td class="bold">${fmtMoney(o.total_amount)}</td>
+            <td>${statusBadge(o.status)}</td>
+            <td class="muted">${fmtDate(o.created_at)}</td>
+            <td>
+              <div class="table-actions" style="justify-content:flex-end">
+                <button class="btn btn-outline btn-sm" onclick="viewOrder(${o.id})">Chi tiết</button>
+              </div>
+            </td>
+          </tr>`).join('');
+
+        const totalPages = res.pagination.totalPages;
+        if (totalPages > 1) {
+          let html = `<button ${page <= 1 ? 'disabled' : ''} data-p="${page - 1}">←</button>`;
+          for (let i = 1; i <= totalPages; i++) html += `<button class="${i === page ? 'active' : ''}" data-p="${i}">${i}</button>`;
+          html += `<button ${page >= totalPages ? 'disabled' : ''} data-p="${page + 1}">→</button>`;
+          pager.innerHTML = html;
+          pager.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+            const np = parseInt(b.getAttribute('data-p'));
+            if (np && np !== page) { page = np; load(); }
+          }));
+        } else pager.innerHTML = '';
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="muted center">Lỗi: ${esc(e.message)}</td></tr>`;
+        pager.innerHTML = '';
+      }
+    }
+
+    async function viewOrder(id) {
+      try {
+        const res = await API.get('/api/admin/orders/' + id);
+        const o = res.data;
+        const actions = NEXT[o.status] || [];
+        openModal('Chi tiết đơn hàng', `
+          <div class="flex-between" style="margin-bottom:14px">
+            <div>
+              <div class="bold" style="font-size:16px">${esc(o.order_code)}</div>
+              <div class="muted small">${fmtDate(o.created_at)}</div>
+            </div>
+            ${statusBadge(o.status)}
+          </div>
+          <div style="background:var(--surface-3);border-radius:10px;padding:14px;margin-bottom:16px">
+            <div class="small"><b>Người nhận:</b> ${esc(o.recipient_name)} — ${esc(o.recipient_phone)}</div>
+            <div class="small mt-1"><b>Địa chỉ:</b> ${esc(o.shipping_address)}</div>
+            <div class="small mt-1"><b>Khách hàng:</b> ${esc(o.customer)} (${esc(o.email)})</div>
+            <div class="small mt-1"><b>Thanh toán:</b> COD</div>
+          </div>
+          <div>
+            ${o.items.map((it) => `
+              <div class="order-item" style="padding:10px 0">
+                <div class="order-thumb">${mediaHtml(it.image_url, it.name, 'img-placeholder')}</div>
+                <div class="grow">
+                  <div class="small bold">${esc(it.name)}</div>
+                  <div class="small muted">SL: ${it.quantity} × ${fmtMoney(it.unit_price)}</div>
+                </div>
+                <div class="small bold">${fmtMoney(it.line_total)}</div>
+              </div>`).join('')}
+            <div class="summary-row total"><span>Tổng tiền</span><span>${fmtMoney(o.total_amount)}</span></div>
+          </div>
+          ${actions.length ? `
+            <div class="flex mt-3" style="justify-content:flex-end">
+              ${actions.map((a) => `<button class="btn ${a.cls} btn-sm" onclick="updateStatus(${o.id}, '${a.v}')">${a.label}</button>`).join('')}
+            </div>` : ''}
+        `);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.viewOrder = viewOrder;
+
+    async function updateStatus(id, newStatus) {
+      try {
+        await API.put('/api/admin/orders/' + id + '/status', { status: newStatus });
+        toast('Đã cập nhật trạng thái đơn hàng.', 'success');
+        closeModal();
+        load();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+    window.updateStatus = updateStatus;
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      q = e.target.value.trim(); page = 1; debounce(load, 300);
+    });
+    document.getElementById('status-filter').addEventListener('change', (e) => {
+      status = e.target.value; page = 1; load();
+    });
+
+    let t;
+    function debounce(fn, ms) { clearTimeout(t); t = setTimeout(fn, ms); }
+
+    load();
+  </script>
+</body>
+</html>
