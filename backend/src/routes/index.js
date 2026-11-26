@@ -1,8 +1,10 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 
-router.get("/health", (req, res) => {
-  res.json({ success: true, message: "ShopEase API is running" });
-});
+router.use('/auth', require('./auth.routes'));
+router.use('/', require('./product.routes'));
+router.use('/cart', require('./cart.routes'));
+router.use('/orders', require('./order.routes'));
+router.use('/admin', require('./admin.routes'));
 
 module.exports = router;
